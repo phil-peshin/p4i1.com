@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script type="text/javascript" src="/static/js/jquery-1.9.1.min.js"><!-- --></script>
+<script type="text/javascript" src="/static/js/jcanvas.min.js"><!-- --></script>
+<link rel="icon" href="/static/img/logo.png" type="image/png" />
+<meta http-equiv="cache-control" content="no-cache" />
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+<meta property="fb:app_id" content="194460934042219" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="http://p4i1.com" />
+<meta property="og:site_name" content="p4i1" />
+<meta property="og:image" content="http://p4i1.com/static/img/logo.png"/>
+<meta property="og:title" content="Touch it, Click it, Drag it" />
+<meta property="og:description" content="Kill time with some random strangers"/>
+<title>Touch it, Click it, Drag it</title>
+
+<meta charset="UTF-8" />
+<style type="text/css">
+
+canvas {
+  border: 1px dotted gray;
+  background-color: white;
+}
+
+body {
+    background-color: #E2E2E2;
+    font-family: "Arial Rounded MT Bold", Arial, sans-serif;
+}
+
+#head {
+    width: 1000px;
+    text-align: left;
+}
+
+#stat {
+    float: right;
+    border-spacing:0;
+    border-collapse:collapse;
+}
+
+#stat th {
+    text-align: left;
+    padding: 5px 20px 5px 5px;
+    border-right: 1px dotted gray;
+}
+
+#stat td {
+    width: 50px;
+    padding: 5px;
+    text-align: center;
+}
+
+#stat caption {
+    text-align: left;
+    border-bottom: 1px dotted gray;
+    padding: 5px;
+}
+</style> 
+
+<script type="text/javascript">
+
+var is_touch = function() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+}
+
+var get_random_color = function() {
+    var letters = '0123456789ABCDEF'.split('');
+    var color = '#';
+    for (var i = 0; i < 6; i++ ) {
+        color += letters[Math.round(Math.random() * 15)];
+    }
+    return color;
+}
+
+var objects = new Array();
+var SOURCE = Math.random();
+
+$(document).ready(function(){
+    var layer_conf = {
+        type: "rectangle",
+        fillStyle: "#FFF",
+        x: 0, y: 0,
+        width: 2000, 
+        height: 1200
+    };
+    if (is_touch()) {
+        layer_conf.touchstart = canvas_click;
+    } else {
+        layer_conf.click = canvas_click;
+    }
+    $("canvas").addLayer(layer_conf);
+    read_objects();
+    window.setInterval(show_stat, 1000)
+});
+
+var show_stat = function() {
+    $.get('/stat', function(data) {
+       $('#playing').text(data.playing); 
+       $('#watching').text(data.watching - data.playing); 
+    });
+}
+
+var canvas_click = function(layer) {
+    var x = layer.eventX - layer.x;
+    var y = layer.eventY - layer.y;
+    $.post('/data', {radius: 50, x: x, y: y, color: get_random_color(), source: SOURCE}, create);
+}
+
+var create = function(obj) {
+    objects[obj.id] = obj;
+    var obj_conf = {
+        fillStyle: obj.color,
+        //strokeStyle: "#000",
+        //strokeWidth: 1,
+        x: obj.x, 
+        y: obj.y,
+        radius: 10,
+        layer: true,
+        name: obj.id,
+        fromCenter: true,
+        draggable: true,
+        bringToFront: true,
+        shadowColor: "#000",
+        shadowBlur: 10,
+        shadowX: 3, shadowY: 3,
+        drag: object_drag,
+        dragstop: object_drag
+    };
+    if (is_touch()) {
+        obj_conf.touchstart = object_click;
+    } else {
+        obj_conf.click = object_click;
+    }
+    
+    $("canvas").drawArc(obj_conf);
+    inflate(obj.id);
+}
+
+var object_drag = function(layer) {
+    objects[layer.name].x = layer.eventX;
+    objects[layer.name].y = layer.eventY;
+    update_obj(layer.name);
+}
+
+var object_click = function(layer) {
+    $("canvas").stopLayer(layer.name, true);
+    objects[layer.name].radius += 20;
+    update_obj(layer.name);
+    $(this).animateLayer(layer.name, {
+        radius: objects[layer.name].radius
+    }, "slow", function() { window.setTimeout(inflate(layer.name), 200) });
+}
+
+var inflate = function(obj) {
+    $("canvas").animateLayer(obj, {
+        radius: objects[obj].radius + 10
+     }, "slow", function() { window.setTimeout(deflate(obj), 200) });
+}
+
+var deflate = function(obj) {
+    $("canvas").animateLayer(obj, {
+        radius: objects[obj].radius - 10 
+    }, "slow", function() { window.setTimeout(inflate(obj), 200) });
+}
+
+// outgoing
+var update_obj = function(id) {
+    objects[id].source = SOURCE;
+    $.post('/data', objects[id]);
+}
+
+var max_timestamp = 0;
+
+var read_objects = function() {
+    $.get('/data', function(data){
+        for (var i in data) {
+            var obj = data[i];
+            create(obj);
+            if (obj.timestamp > max_timestamp) {
+                max_timestamp = obj.timestamp;
+            }
+        }
+        window.setInterval(read_queue, 500);
+    });
+}
+
+var read_queue = function() {
+    $.get('/queue', {source: SOURCE, timestamp: max_timestamp}, function(queue){
+        for (var i in queue) {
+            var obj = queue[i];
+            switch (obj.command) {
+            case 'create':
+                create(obj);
+                break;
+            case 'update':
+                update(obj);
+                break;
+            case 'destroy':
+                destroy(obj);
+                break;
+            }
+            if (obj.timestamp > max_timestamp) {
+                max_timestamp = obj.timestamp;
+            }
+        }
+    });
+}
+
+var update = function(obj){
+    objects[obj.id] = obj;
+    $("canvas").stopLayer(obj.id, true);
+    $("canvas").animateLayer(obj.id, {
+        radius: obj.radius,
+        x: obj.x,
+        y: obj.y
+    }, "slow", function() { window.setTimeout(inflate(obj.id), 200) });
+}
+
+var destroy = function(obj) {
+    $("canvas").removeLayer(obj.id);
+}
+
+</script> 
+</head>
+<body>
+    <div id="fb-root"></div>
+    <script>(function(d, s, id) {
+      var js, fjs = d.getElementsByTagName(s)[0];
+      if (d.getElementById(id)) return;
+      js = d.createElement(s); js.id = id;
+      js.src = "//connect.facebook.net/en_US/all.js#xfbml=1&appId=194460934042219";
+      fjs.parentNode.insertBefore(js, fjs);
+    }(document, 'script', 'facebook-jssdk'));</script>
+
+    <center>
+        <div id="head">
+            <table id="stat">
+                <caption>Strangers</caption>
+                <tbody>
+                <tr><th>Playing now</th><td id="playing"></td></tr>
+                <tr><th>Just watching</th><td id="watching"></td></tr>
+                </tbody>
+            </table>
+            <h1>Touch it, Click it, Drag it</h1>
+            <h2>Kill time with some random strangers</h2>
+        </div>
+        <canvas width="1000px" height="600px"></canvas>
+        <div class="fb-like" data-href="http://p4i1.com" data-send="false" data-width="1000" data-show-faces="true"></div>
+        <div class="fb-comments" data-href="http://p4i1.com" data-width="1000" data-num-posts="10"></div>
+    </center>
+</body>
+</html>

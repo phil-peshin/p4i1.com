@@ -1,0 +1,9 @@
+#!/bin/bash
+
+yum -y install httpd
+yum -y install python-pip
+python-pip -q install flask
+python-pip -q install flask-restful
+
+cp -f etc/httpd/welcome.conf /etc/httpd/conf.d/
+service httpd start
