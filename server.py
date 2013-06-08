@@ -34,6 +34,8 @@ class Circles(Resource):
     
     def post(self):
         obj = parser.parse_args()
+        if obj['radius'] > 200:
+            obj['radius'] = 200
         obj_id = obj['id']
         if not obj_id:
             obj_id = gen_id()

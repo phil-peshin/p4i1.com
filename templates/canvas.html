@@ -98,7 +98,7 @@ $(document).ready(function(){
     }
     $("canvas").addLayer(layer_conf);
     read_objects();
-    window.setInterval(show_stat, 1000)
+    window.setInterval(show_stat, 2000)
 });
 
 var show_stat = function() {
@@ -131,8 +131,8 @@ var create = function(obj) {
         shadowColor: "#000",
         shadowBlur: 10,
         shadowX: 3, shadowY: 3,
-        drag: object_drag,
-        dragstop: object_drag
+        dragstart: object_drag_start,
+        dragstop: object_drag_end
     };
     if (is_touch()) {
         obj_conf.touchstart = object_click;
@@ -144,13 +144,22 @@ var create = function(obj) {
     inflate(obj.id);
 }
 
-var object_drag = function(layer) {
+var object_drag_start = function(layer) {
+    objects[layer.name].dragging = true;
+}
+
+var object_drag_end = function(layer) {
     objects[layer.name].x = layer.eventX;
     objects[layer.name].y = layer.eventY;
     update_obj(layer.name);
+    objects[layer.name].dragging = false;
 }
 
 var object_click = function(layer) {
+    if (objects[layer.name].radius > 200) {
+        return
+    }
+    
     $("canvas").stopLayer(layer.name, true);
     objects[layer.name].radius += 20;
     update_obj(layer.name);
@@ -188,7 +197,7 @@ var read_objects = function() {
                 max_timestamp = obj.timestamp;
             }
         }
-        window.setInterval(read_queue, 500);
+        window.setInterval(read_queue, 1000);
     });
 }
 
@@ -215,6 +224,9 @@ var read_queue = function() {
 }
 
 var update = function(obj){
+    if (objects[obj.id].dragging) {
+        return;
+    }
     objects[obj.id] = obj;
     $("canvas").stopLayer(obj.id, true);
     $("canvas").animateLayer(obj.id, {
@@ -225,6 +237,9 @@ var update = function(obj){
 }
 
 var destroy = function(obj) {
+    if (objects[obj.id].dragging) {
+        return;
+    }
     $("canvas").removeLayer(obj.id);
 }
 
